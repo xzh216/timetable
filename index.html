@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>考研复习时间表与倒计时</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .countdown-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1), 0 6px 6px rgba(0,0,0,0.1);
+        }
+        .countdown-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .countdown-value {
+            font-family: 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", monospace;
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .countdown-label {
+            font-size: 0.75rem;
+            font-weight: 400;
+            margin-top: 0.25rem;
+            text-transform: uppercase;
+        }
+        .highlight {
+            background-color: #fde68a !important;
+            color: #1f2937;
+            font-weight: 700;
+            transform: scale(1.01);
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 4px 15px rgba(253, 230, 138, 0.5);
+        }
+        .todo-item.completed span {
+            text-decoration: line-through;
+            color: #9ca3af;
+        }
+        .delete-btn {
+            opacity: 0.2;
+            transition: opacity 0.2s ease-in-out;
+        }
+        .todo-item:hover .delete-btn {
+            opacity: 1;
+        }
+        /* Style for textareas in edit mode */
+        .editable-textarea {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+            background-color: #f9fafb;
+            resize: vertical;
+            min-height: 60px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 p-4 md:p-8">
+
+    <div class="w-full max-w-7xl mx-auto">
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-bold text-gray-900">我的考研征途</h1>
+        </header>
+
+        <!-- Countdown Timer -->
+        <div id="countdown" class="countdown-box text-white rounded-2xl p-4 mb-8 flex justify-around items-center text-center">
+            <div class="countdown-item">
+                <div id="days" class="countdown-value">00</div>
+                <div class="countdown-label">天</div>
+            </div>
+            <div class="countdown-item">
+                <div id="hours" class="countdown-value">00</div>
+                <div class="countdown-label">时</div>
+            </div>
+            <div class="countdown-item">
+                <div id="minutes" class="countdown-value">00</div>
+                <div class="countdown-label">分</div>
+            </div>
+            <div class="countdown-item">
+                <div id="seconds" class="countdown-value">00</div>
+                <div class="countdown-label">秒</div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Schedule Table -->
+            <div class="lg:col-span-2 bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div class="p-4 border-b flex justify-between items-center">
+                    <h2 class="text-xl font-bold">学习计划</h2>
+                    <button id="toggle-edit-btn" class="text-white bg-blue-600 hover:bg-blue-700 font-medium rounded-lg text-sm px-4 py-2">编辑</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table id="schedule-table" class="w-full text-sm text-left text-gray-600">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3">时间段</th>
+                                <th scope="col" class="px-6 py-3">星期一至星期五</th>
+                                <th scope="col" class="px-6 py-3">星期六</th>
+                                <th scope="col" class="px-6 py-3">星期日</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schedule-body" class="divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- To-Do List -->
+            <div class="bg-white rounded-2xl shadow-lg">
+                 <div class="p-4 border-b">
+                    <h2 class="text-xl font-bold">今日待办</h2>
+                </div>
+                <div class="p-4">
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="todo-input" class="flex-grow bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="添加新任务...">
+                        <button id="add-todo-btn" class="text-white bg-blue-600 hover:bg-blue-700 font-medium rounded-lg text-sm px-5 py-2.5">添加</button>
+                    </div>
+                    <ul id="todo-list" class="space-y-2"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const scheduleStorageKey = 'my-study-schedule';
+        const todoStorageKey = 'my-todo-list';
+
+        // --- INITIAL DATA ---
+        const initialScheduleData = [
+            { time: "7:30-8:00", weekday: "起床、洗漱、早餐", saturday: "起床、洗漱、早餐", sunday: "起床、洗漱、早餐" },
+            { time: "8:00-9:00", weekday: "英语：不背单词50词 (旧词+新词)", saturday: "英语：模拟测试或阅读理解", sunday: "休息/自由安排" },
+            { time: "9:00-12:00", weekday: "数学：高等数学：微积分+线性代数 (听课/做题)", saturday: "数学：专题训练/错题回顾", sunday: "放松/活动" },
+            { time: "12:00-13:00", weekday: "午餐、午休", saturday: "午餐、午休", sunday: "午餐、午休" },
+            { time: "14:00-14:30", weekday: "政治：预习 (看网课/翻书, 打基础)", saturday: "政治：预习并梳理", sunday: "放松/活动" },
+            { time: "15:00-17:00", weekday: "专业课：机械原理 (看教材+网课)", saturday: "专业课：机械设计 (看教材/网课)", sunday: "放松/活动" },
+            { time: "17:00-18:00", weekday: "运动/晚餐", saturday: "运动/晚餐", sunday: "运动/晚餐" },
+            { time: "18:00-19:00", weekday: "自由学习/复盘今日内容/制定明日计划", saturday: "自由学习/复盘今日内容", sunday: "自由学习/复盘今日内容" },
+            { time: "19:00-21:00", weekday: "综合训练/查漏补缺：错题回顾、阅读英文文献、整理笔记【整理英语真题重点单词】", saturday: "综合训练/查漏补缺", sunday: "自由支配" },
+            { time: "21:00-22:00", weekday: "英语：不背单词50词 (旧词+新词)", saturday: "英语：不背单词50词 (旧词+新词)", sunday: "睡前放松/阅读" },
+            { time: "22:00-24:00", weekday: "睡前放松/阅读 休息", saturday: "休息", sunday: "休息" }
+        ];
+
+        let scheduleData = JSON.parse(localStorage.getItem(scheduleStorageKey)) || initialScheduleData;
+        let isEditMode = false;
+
+        // --- COUNTDOWN TIMER LOGIC ---
+        function setupCountdown() {
+            const targetDate = new Date("2025-12-20T08:30:00");
+            const elements = {
+                days: document.getElementById('days'),
+                hours: document.getElementById('hours'),
+                minutes: document.getElementById('minutes'),
+                seconds: document.getElementById('seconds'),
+                countdown: document.getElementById('countdown')
+            };
+
+            function updateCountdown() {
+                const now = new Date().getTime();
+                const distance = targetDate - now;
+
+                if (distance < 0) {
+                    elements.countdown.innerHTML = '<h2 class="text-xl font-bold">考试已开始，祝你成功！</h2>';
+                    clearInterval(interval);
+                    return;
+                }
+
+                elements.days.textContent = String(Math.floor(distance / (1000 * 60 * 60 * 24))).padStart(2, '0');
+                elements.hours.textContent = String(Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))).padStart(2, '0');
+                elements.minutes.textContent = String(Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, '0');
+                elements.seconds.textContent = String(Math.floor((distance % (1000 * 60)) / 1000)).padStart(2, '0');
+            }
+            const interval = setInterval(updateCountdown, 1000);
+            updateCountdown();
+        }
+
+        // --- SCHEDULE DISPLAY & EDITING LOGIC ---
+        function renderSchedule() {
+            const scheduleBody = document.getElementById('schedule-body');
+            scheduleBody.innerHTML = ''; // Clear before rendering
+            
+            scheduleData.forEach((item, rowIndex) => {
+                const row = document.createElement('tr');
+                row.className = rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                
+                const createCell = (content, colName) => {
+                    if (isEditMode) {
+                        return `<textarea class="editable-textarea" data-row="${rowIndex}" data-col="${colName}">${content}</textarea>`;
+                    }
+                    return `<span>${content}</span>`;
+                };
+
+                row.innerHTML = `
+                    <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${item.time}</td>
+                    <td class="px-6 py-4" data-day="1,2,3,4,5" data-time="${item.time}">${createCell(item.weekday, 'weekday')}</td>
+                    <td class="px-6 py-4" data-day="6" data-time="${item.time}">${createCell(item.saturday, 'saturday')}</td>
+                    <td class="px-6 py-4" data-day="0" data-time="${item.time}">${createCell(item.sunday, 'sunday')}</td>
+                `;
+                scheduleBody.appendChild(row);
+            });
+            updateHighlight();
+        }
+
+        function saveScheduleChanges() {
+            const textareas = document.querySelectorAll('#schedule-body textarea');
+            textareas.forEach(area => {
+                const row = area.dataset.row;
+                const col = area.dataset.col;
+                scheduleData[row][col] = area.value;
+            });
+            localStorage.setItem(scheduleStorageKey, JSON.stringify(scheduleData));
+        }
+
+        function setupEditToggle() {
+            const toggleBtn = document.getElementById('toggle-edit-btn');
+            toggleBtn.addEventListener('click', () => {
+                isEditMode = !isEditMode;
+                if (isEditMode) {
+                    // Entering edit mode
+                    toggleBtn.textContent = '保存';
+                    toggleBtn.classList.replace('bg-blue-600', 'bg-green-600');
+                    toggleBtn.classList.replace('hover:bg-blue-700', 'hover:bg-green-700');
+                } else {
+                    // Leaving edit mode (saving)
+                    saveScheduleChanges();
+                    toggleBtn.textContent = '编辑';
+                    toggleBtn.classList.replace('bg-green-600', 'bg-blue-600');
+                    toggleBtn.classList.replace('hover:bg-green-700', 'hover:bg-blue-700');
+                }
+                renderSchedule();
+            });
+        }
+
+        function updateHighlight() {
+            if (isEditMode) return; // No highlight in edit mode
+
+            const now = new Date();
+            const currentDay = now.getDay();
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+
+            document.querySelectorAll('#schedule-table td.highlight').forEach(cell => cell.classList.remove('highlight'));
+
+            document.querySelectorAll('#schedule-table td[data-day]').forEach(cell => {
+                const applicableDays = cell.dataset.day.split(',').map(Number);
+                if (!applicableDays.includes(currentDay)) return;
+
+                const [startTimeStr, endTimeStr = '24:00'] = cell.dataset.time.split('-');
+                const [startHour, startMinute] = startTimeStr.split(':').map(Number);
+                const [endHour, endMinute] = endTimeStr.split(':').map(Number);
+                const startTime = startHour * 60 + startMinute;
+                const endTime = endHour * 60 + endMinute;
+
+                if (currentTime >= startTime && currentTime < endTime) {
+                    cell.classList.add('highlight');
+                }
+            });
+        }
+        
+        // --- TODO LIST LOGIC ---
+        function setupTodo() {
+            const input = document.getElementById('todo-input');
+            const addBtn = document.getElementById('add-todo-btn');
+            const listEl = document.getElementById('todo-list');
+            let todos = JSON.parse(localStorage.getItem(todoStorageKey)) || [];
+
+            const saveTodos = () => localStorage.setItem(todoStorageKey, JSON.stringify(todos));
+
+            const renderTodos = () => {
+                listEl.innerHTML = '';
+                todos.forEach((todo, index) => {
+                    const item = document.createElement('li');
+                    item.className = `todo-item flex items-center p-2 rounded-md hover:bg-gray-50 ${todo.completed ? 'completed' : ''}`;
+                    item.innerHTML = `
+                        <input type="checkbox" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${todo.completed ? 'checked' : ''} data-index="${index}">
+                        <span class="ml-3 flex-grow">${todo.text}</span>
+                        <button class="delete-btn ml-auto p-1 rounded hover:bg-red-100 text-red-500" data-index="${index}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    `;
+                    listEl.appendChild(item);
+                });
+            };
+
+            const addTodo = () => {
+                const text = input.value.trim();
+                if (text) {
+                    todos.push({ text, completed: false });
+                    input.value = '';
+                    saveTodos();
+                    renderTodos();
+                }
+            };
+
+            addBtn.addEventListener('click', addTodo);
+            input.addEventListener('keypress', (e) => e.key === 'Enter' && addTodo());
+
+            listEl.addEventListener('click', (e) => {
+                if (e.target.type === 'checkbox') {
+                    todos[e.target.dataset.index].completed = !todos[e.target.dataset.index].completed;
+                    saveTodos();
+                    renderTodos();
+                }
+                if (e.target.closest('.delete-btn')) {
+                    todos.splice(e.target.closest('.delete-btn').dataset.index, 1);
+                    saveTodos();
+                    renderTodos();
+                }
+            });
+
+            renderTodos();
+        }
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            setupCountdown();
+            renderSchedule();
+            setupEditToggle();
+            setInterval(updateHighlight, 5000);
+            setupTodo();
+        });
+    </script>
+</body>
+</html>
