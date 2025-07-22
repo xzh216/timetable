@@ -123,10 +123,10 @@
                  <div class="p-4 border-b flex justify-between items-center">
                     <h2 class="text-xl font-bold">今日待办</h2>
                     <div class="flex gap-2">
-                        <button id="sync-btn" class="text-white bg-green-600 hover:bg-green-700 font-medium rounded-lg text-xs px-3 py-1.5">
-                            <span id="sync-status">🔄 同步</span>
+                        <button id="sync-btn" class="text-white bg-green-600 hover:bg-green-700 font-medium rounded-lg text-xs px-3 py-1.5" title="手动同步数据">
+                            <span id="sync-status">🔄 手动同步</span>
                         </button>
-                        <button id="settings-btn" class="text-gray-600 hover:text-gray-800 font-medium rounded-lg text-xs px-2 py-1.5">⚙️</button>
+                        <button id="settings-btn" class="text-gray-600 hover:text-gray-800 font-medium rounded-lg text-xs px-2 py-1.5" title="同步设置">⚙️</button>
                     </div>
                 </div>
                 <div class="p-4">
@@ -330,8 +330,8 @@
                 const statusEl = document.getElementById('sync-status');
                 if (statusEl) {
                     statusEl.textContent = status;
-                    if (status.includes('成功')) {
-                        setTimeout(() => statusEl.textContent = '🔄 同步', 2000);
+                    if (status.includes('成功') || status.includes('失败')) {
+                        setTimeout(() => statusEl.textContent = '🔄 手动同步', 2000);
                     }
                 }
             }
@@ -410,8 +410,15 @@
                     return `<span>${content}</span>`;
                 };
 
+                const createTimeCell = (content) => {
+                    if (isEditMode) {
+                        return `<input type="text" class="w-full px-2 py-1 border border-gray-300 rounded" data-row="${rowIndex}" data-col="time" value="${content}">`;
+                    }
+                    return content;
+                };
+
                 row.innerHTML = `
-                    <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${item.time}</td>
+                    <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${createTimeCell(item.time)}</td>
                     <td class="px-6 py-4" data-day="1,2,3,4,5" data-time="${item.time}">${createCell(item.weekday, 'weekday')}</td>
                     <td class="px-6 py-4" data-day="6" data-time="${item.time}">${createCell(item.saturday, 'saturday')}</td>
                     <td class="px-6 py-4" data-day="0" data-time="${item.time}">${createCell(item.sunday, 'sunday')}</td>
@@ -422,17 +429,25 @@
         }
 
         function saveScheduleChanges() {
+            // 保存 textarea 的内容
             const textareas = document.querySelectorAll('#schedule-body textarea');
             textareas.forEach(area => {
                 const row = area.dataset.row;
                 const col = area.dataset.col;
                 scheduleData[row][col] = area.value;
             });
+            
+            // 保存时间输入框的内容
+            const timeInputs = document.querySelectorAll('#schedule-body input[data-col="time"]');
+            timeInputs.forEach(input => {
+                const row = input.dataset.row;
+                scheduleData[row].time = input.value;
+            });
+            
             localStorage.setItem(scheduleStorageKey, JSON.stringify(scheduleData));
             
-            // 云端同步 - 显示保存状态
-            cloudSync.updateSyncStatus('💾 保存中...');
-            syncAllData();
+            // 移除自动同步，只保存到本地
+            cloudSync.updateSyncStatus('💾 已保存到本地');
         }
 
         function setupEditToggle() {
@@ -489,8 +504,7 @@
 
             const saveTodos = () => {
                 localStorage.setItem(todoStorageKey, JSON.stringify(todos));
-                // 云端同步
-                syncAllData();
+                // 移除自动同步，只保存到本地
             };
 
             const renderTodos = () => {
@@ -610,9 +624,27 @@
 
             syncBtn.addEventListener('click', async () => {
                 if (cloudSync.config.service === 'none') {
-                    settingsBtn.click(); // 打开设置
+                    // 如果没有配置同步服务，打开设置
+                    settingsBtn.click();
                 } else {
-                    await loadFromCloud();
+                    // 手动同步数据
+                    cloudSync.updateSyncStatus('🔄 正在同步...');
+                    
+                    // 上传本地数据到云端
+                    const allData = {
+                        schedule: scheduleData,
+                        todos: JSON.parse(localStorage.getItem(todoStorageKey)) || [],
+                        timestamp: new Date().toISOString()
+                    };
+                    
+                    const uploadSuccess = await cloudSync.syncData(allData);
+                    
+                    if (uploadSuccess) {
+                        cloudSync.updateSyncStatus('✅ 同步成功');
+                    } else {
+                        // 如果上传失败，尝试从云端下载
+                        await loadFromCloud();
+                    }
                 }
             });
         }
